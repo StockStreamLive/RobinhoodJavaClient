@@ -1,0 +1,133 @@
+group 'com.cheddar'
+version '0.2.1'
+
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+    dependencies {
+        classpath "net.ltgt.gradle:gradle-apt-plugin:0.10"
+        classpath "com.github.ben-manes:gradle-versions-plugin:0.14.0"
+    }
+}
+
+apply plugin: 'maven'
+apply plugin: 'signing'
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+apply plugin: "net.ltgt.apt"
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    compileOnly "org.projectlombok:lombok:1.16.16"
+    apt "org.projectlombok:lombok:1.16.16"
+    compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.3'
+    compile group: 'com.google.guava', name: 'guava', version: '21.0'
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.5'
+    compile group: 'commons-io', name: 'commons-io', version: '2.5'
+    compile group: 'commons-lang', name: 'commons-lang', version: '2.5'
+    compile group: 'org.apache.commons', name: 'commons-collections4', version: '4.1'
+    compile group: 'org.json', name: 'json', version: '20160810'
+    compile group: 'joda-time', name: 'joda-time', version: '2.9.9'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.8.5'
+}
+
+publishing {
+    repositories {
+        maven {
+            url "s3://stockstream-artifacts/releases"
+            credentials(AwsCredentials) {
+                accessKey System.env.'GRADLE_AWS_ACCESS_KEY'
+                secretKey System.env.'GRADLE_AWS_SECRET_KEY'
+            }
+        }
+    }
+    publications {
+        mavenJava(MavenPublication) {
+            groupId group
+            artifactId "robinhoodjavaclient"
+            version version
+            from components.java
+        }
+    }
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+            repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                authentication(userName: ossrhUsername, password: ossrhPassword)
+            }
+
+            snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                authentication(userName: ossrhUsername, password: ossrhPassword)
+            }
+
+            pom.project {
+                name 'Robinhood Java Client'
+                packaging 'jar'
+                description 'A simple Java library for connecting to the Robinhood API.'
+                url 'https://github.com/cheddartv/RobinhoodJavaClient'
+
+                scm {
+                    connection 'scm:git:https://github.com/cheddartv/RobinhoodJavaClient.git'
+                    developerConnection 'scm:git:https://github.com/cheddartv/RobinhoodJavaClient.git'
+                    url 'https://github.com/cheddartv/RobinhoodJavaClient'
+                }
+
+                licenses {
+                    license {
+                        name 'The MIT License'
+                        url 'https://opensource.org/licenses/MIT'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id 'mroberts'
+                        name 'Mike Roberts'
+                        email 'mike.roberts@cheddar.com'
+                    }
+                }
+            }
+        }
+    }
+}
+
+task jarFile(type: Jar) {
+    manifest.from jar.manifest
+    classifier = 'all'
+    from configurations.runtime.collect { it.isDirectory() ? it : zipTree(it) }
+    from sourceSets.main.allSource
+    with jar
+}
+
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+artifacts {
+    archives javadocJar, sourcesJar
+}
+
+signing {
+    sign configurations.archives
+}
+
